@@ -107,16 +107,13 @@ function compile (file, inputfolder) {
                     exit += `<a href="${link[1]}">${link[0]}</a>`
                 }
 
+                if (s("!img")) {
+                    const img = line.replace("!img", "").split("$img")
+                    exit += `<img src="${img[1]}" alt="${img[0]}">`
+                }
+
                 if (s("!p")) {
                     exit += `<p>${line.replace("!p", "")}</p>`
-                }
-
-                if (s("!input")) {
-                    exit += `<input type="text" placeholder="${line.replace("!textsend", "")}">`
-                }
-
-                if (s("!send")) {
-                    exit += `<button onclick="send('${line.replace("!send", "")}')">${line.replace("!send", "")}</button>`
                 }
 
                 if (line == "lb") exit += "<br>"

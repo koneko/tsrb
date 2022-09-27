@@ -70,7 +70,7 @@ function compile (file, inputfolder) {
             line = line.replace("\r", "")
             //check if string starts with a special character
             if (line.startsWith("!ignore")) {
-                exit += `<span>${line}</span>`
+                exit += `<span>${line.replace("!ignore", "")}</span>`
             } else if (line.startsWith("//")) {
                 //ignore comments, they are not needed in the compiled file, carry on with the next line, but do not add \n
                 return
@@ -182,12 +182,16 @@ function interpret (line) {
             inputline = `<script>setTitle("${title}")</script>`
         }
         if (line.startsWith("description=")) {
-            let description = linputlineine.replace("description=", "")
+            let description = linputline.replace("description=", "")
             inputline = `<meta name="description" content="${description}">`
         }
         if (line.startsWith("date=")) {
-            let keywords = inputline.replace("keywords=", "")
+            let keywords = inputline.replace("date=", "")
             inputline = `<meta name="date" content="${keywords}">`
+        }
+        if (line.startsWith("color=")) {
+            let color = linputline.replace("color=", "")
+            inputline = `<script>changeColor("${color}"); changeIconColor("${color}")</script>`
         }
         return inputline
     }
@@ -222,7 +226,27 @@ if (watch != "index" && watch != false) {
         })
     })
 } else if (watch == "index") {
-    //
+    //get all subfolders from outputfolder
+    let folders = getAllSubFolders(outputFolder)
 } else {
     compileAll()
+}
+
+function getAllSubFolders (folder) {
+    let arr = []
+    function crawl () {
+        let files = fs.readdirSync(folder)
+        files.forEach(file => {
+            let path = folder + "/" + file
+            if (fs.statSync(path).isDirectory()) {
+                //check if directory is in arr
+                if (!arr.includes(path)) {
+                    arr.push(path)
+                    crawl(path)
+                }
+            }
+        })
+    }
+    crawl()
+    return arr
 }

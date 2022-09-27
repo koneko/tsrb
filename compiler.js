@@ -197,7 +197,7 @@ function interpret (line) {
 
 }
 
-if (watch != "index") {
+if (watch != "index" && watch != false) {
     console.log("\x1b[36m%s\x1b[0m", "Watch mode enabled.")
     console.log("\x1b[33m%s\x1b[0m", "Watching folder " + inputFolder + " for changes and outputing compilation to " + outputFolder + ".")
 

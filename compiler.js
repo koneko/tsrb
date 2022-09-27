@@ -17,10 +17,14 @@ let watch = args[2]
 if (!watch) watch = false
 
 let last = []
-let specialChars = "#!|*"
+let specialChars = "#!|*[]"
 
 if (watch == "true") watch = true
+else if (watch == "index") watch = "index"
 else watch = false
+
+var exit = ""
+var metaMode = false
 function compileAll (inputfile) {
     if (!inputfile) inputfile = inputFolder
     if (inputfile.endsWith(".koneko")) return
@@ -60,68 +64,19 @@ function compile (file, inputfolder) {
             return
         }
         const lines = data.split("\n")
-        let exit = ""
         lines.forEach(line => {
             // console.log('\x1b[33m%s\x1b[0m', "Compiled line: " + lines.indexOf(line) + ".")
             //remove \r
             line = line.replace("\r", "")
-
-            function s (str) {
-                return line.startsWith(str)
-            }
-
-            function e (str) {
-                return line.endsWith(str)
-            }
-
-            function c (str) {
-                return line.includes(str)
-            }
             //check if string starts with a special character
-            if (!specialChars.includes(line[0])) {
+            if (line.startsWith("!ignore")) {
                 exit += `<span>${line}</span>`
+            } else if (line.startsWith("//")) {
+                //ignore comments, they are not needed in the compiled file, carry on with the next line, but do not add \n
+                return
             } else {
-                if (s("###")) {
-                    //add <h3> to beginning of line and </h3> to end
-                    exit += `<h3>${line.replace("###", "")}</h3>`
-                } else if (s("##")) {
-                    //add <h2> to beginning of line and </h2> to end
-                    exit += `<h2>${line.replace("##", "")}</h2>`
-                } else if (s("#")) {
-                    //add <h1> to beginning of line and </h1> to end
-                    exit += `<h1>${line.replace("#", "")}</h1>`
-                }
-
-                if (s("**") && e("**")) {
-                    exit += `<b>${line.replace(/\*\*/g, "")}</b>`
-                } else if (s("*") && e("*")) {
-                    exit += `<i>${line.replace(/\*/g, "")}</i>`
-                }
-
-                if (s("!muted")) {
-                    exit += `<p class="muted">${line.replace("!muted", "")}</p>`
-                }
-
-                if (s("!link")) {
-                    const link = line.replace("!link", "").split("$link")
-                    exit += `<a href="${link[1]}">${link[0]}</a>`
-                }
-
-                if (s("!img")) {
-                    const img = line.replace("!img", "").split("$img")
-                    exit += `<img src="${img[1]}" alt="${img[0]}">`
-                }
-
-                if (s("!p")) {
-                    exit += `<p>${line.replace("!p", "")}</p>`
-                }
-
-                if (line == "lb") exit += "<br>"
-
-                if (s("|!") && e("!|")) {
-                    exit += `<script>document.title = "${line.replace("|!", "").replace("!|", "")}";document.querySelector(".headertitle").innerHTML = "${line.replace("|!", "").replace("!|", "")}"</script>`
-                }
-
+                let quick = interpret(line)
+                if (quick != undefined) exit += quick
             }
             //if last line, no \n
             if (lines.indexOf(line) !== lines.length - 1) {
@@ -132,7 +87,6 @@ function compile (file, inputfolder) {
         let name = file.replace(".koneko", ".html")
         let content = fs.readFileSync(path.join("./base.html"), "utf8")
         content = content.replace("{{content}}", exit)
-        content += `<script src="/utils/utils.js"></script><link rel="stylesheet" href="/utils/style.css">`
         let bad = outputFolder.replace("./", "")
         let inputfoldercustom = inputFolder.replace("./", "")
         bad = file.replace(inputFolder.replace("./", ""), bad).replace(".koneko", ".html")
@@ -151,11 +105,99 @@ function compile (file, inputfolder) {
                 }
             })
         }
-
+        exit = ""
     })
 }
 
-if (watch) {
+function interpret (line) {
+    //base regex: /\*(.*)\*/gi
+    let outputline = ""
+    let replaced = false
+    function regex (text, type) {
+        let regex, executed
+        if (type == "b") {
+            regex = /\*\*(.*)\*\*/i
+            executed = regex.exec(text)
+            if (executed) return executed
+            else return false
+        } else if (type == "i") {
+            regex = /\*(.*)\*/i
+            executed = regex.exec(text)
+            if (executed) return executed
+            else return false
+        } else if (type == "meta") {
+            if (text == "<meta>") return true
+            else return false
+        } else if (type == "exclaim") {
+            regex = /\[(.*)\]/i
+            executed = regex.exec(text)
+            if (executed) return executed
+            else return false
+        }
+    }
+    outputline += line
+    function check (inputline) {
+        replaced = false
+        let bold = regex(line, "b")
+        if (bold != false) {
+            inputline = inputline.replace(/\*\*(.*)\*\*/gi, `<b>${bold[1]}</b>`)
+        }
+        let italic = regex(line, "i")
+        if (italic != false) {
+            inputline = inputline.replace(/\*(.*)\*/gi, `<i>${italic[1]}</i>`)
+        }
+        let exclaim = regex(line, "exclaim")
+        if (exclaim != false) {
+            let exclaimtext = exclaim[1]
+            let exclaimtype = exclaimtext.split("$")[0]
+            let exclaimlink = exclaimtext.split("$")[1]
+            let linktype = ""
+            let linksrc = ""
+            let linktext = ""
+            if (exclaimtype.startsWith("!img")) {
+                //remove the !img
+                exclaimtype = exclaimtype.replace("!img", "")
+                linktype = "img"
+                linksrc = `" src="${exclaimlink}`
+                linktext = exclaimtype
+            } else if (exclaimtype.startsWith("!link")) {
+                //remove the !link
+                exclaimtype = exclaimtype.replace("!link", "")
+                linktype = "a"
+                linksrc = exclaimlink
+                linktext = exclaimtype
+            } else if (exclaimtype.startsWith("!muted")) {
+                linktype = "span"
+                linksrc = '" class="muted'
+            }
+            inputline = inputline.replace(/\[(.*)\]/gi, `<${linktype} href="${linksrc}">${linktext}</${linktype}>`).replace("[", "").replace("]", "")
+        }
+        if (inputline.startsWith("#")) {
+            let header = inputline.split(" ")[0]
+            let headerText = inputline.replace(header, "")
+            inputline = `<h${header.length}>${headerText}</h${header.length}>`
+        }
+        if (line.startsWith("title=")) {
+            let title = inputline.replace("title=", "")
+            inputline = `<script>setTitle("${title}")</script>`
+        }
+        if (line.startsWith("description=")) {
+            let description = linputlineine.replace("description=", "")
+            inputline = `<meta name="description" content="${description}">`
+        }
+        if (line.startsWith("date=")) {
+            let keywords = inputline.replace("keywords=", "")
+            inputline = `<meta name="date" content="${keywords}">`
+        }
+        return inputline
+    }
+
+    outputline = check(outputline)
+    return outputline
+
+}
+
+if (watch != "index") {
     console.log("\x1b[36m%s\x1b[0m", "Watch mode enabled.")
     console.log("\x1b[33m%s\x1b[0m", "Watching folder " + inputFolder + " for changes and outputing compilation to " + outputFolder + ".")
 
@@ -179,6 +221,8 @@ if (watch) {
             }
         })
     })
+} else if (watch == "index") {
+    //
 } else {
     compileAll()
 }
